@@ -43,24 +43,38 @@ public class FindCommonFriends2 {
       String line = value.toString();
       StringTokenizer itr = new StringTokenizer(line,",");
       String person = itr.nextToken();
+      String[] people = {"100","200","300","400","500","600"};
       String friends = itr.nextToken();
       StringTokenizer itrFriends = new StringTokenizer(friends);
-      while (itrFriends.hasMoreTokens()) {
-        String friend = itrFriends.nextToken();
+      for(String val:people){
         String newKey = new String();
-        if(person.compareTo(friend) > 0){
-          newKey = friend+","+person;
+        if(person.compareTo(val) > 0){
+          newKey = val+","+person;
+        }
+        else if(person.compareTo(val) < 0){
+          newKey = person+","+val;
         }
         else{
-          newKey = person+","+friend;
+          continue;
         }
-        context.write(new Text(newKey), new Text(friends));
+        context.write(new Text("["+newKey+"],"), new Text(friends));
       }
+      // while (itrFriends.hasMoreTokens()) {
+      //   String friend = itrFriends.nextToken();
+      //   String newKey = new String();
+      //   if(person.compareTo(friend) > 0){
+      //     newKey = friend+","+person;
+      //   }
+      //   else{
+      //     newKey = person+","+friend;
+      //   }
+      //   context.write(new Text(newKey), new Text(friends));
+      // }
     }
   }
 
   public static class FindCommonFriendsReducer
-       extends Reducer<Text,Text,Text,Text> {
+       extends Reducer<Text,Text,Text,NullWritable> {
     public static HashSet<String> getFriendsSet(String input) {
       StringTokenizer stringTokenizer = new StringTokenizer(input);
       HashSet<String> friendsSet = new HashSet<>();
@@ -81,7 +95,9 @@ public class FindCommonFriends2 {
           HashSet<String> friendSet2 = getFriendsSet(friends2);
           HashSet<String> commonFriends = new HashSet<>(friendSet1);
           commonFriends.retainAll(friendSet2);
-          context.write(key, new Text(String.join(",",commonFriends)));
+          if(!commonFriends.isEmpty() && key.toString().length()!=0){
+            context.write(new Text("("+key.toString()+"["+String.join(",",commonFriends)+"])"),NullWritable.get());
+          }
       }
       // String str=new String();
       // for(Text val:values)
