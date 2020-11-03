@@ -64,3 +64,4 @@
 ([400,600],[100])
 ([500,600],[100])
 ### 运行成功页面截图
+https://finclaw.oss-cn-shenzhen.aliyuncs.com/img/map_reduce.png
