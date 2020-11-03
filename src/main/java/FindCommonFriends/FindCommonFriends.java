@@ -38,21 +38,14 @@ public class FindCommonFriends {
     public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
         String line = value.toString();
-
-        String[] userAndfriends = line.split(",");      
-        String user = userAndfriends[0];        //获取输入值中的用户名称
-        String[] friends = userAndfriends[1].split(" ");        //获取输入值中的好友列表
-        for (String friend : friends) {
-            context.write(new Text(friend), new Text(user));
+        StringTokenizer itr = new StringTokenizer(line,",");
+        String person = itr.nextToken();
+        String friends = itr.nextToken();
+        StringTokenizer itrFriends = new StringTokenizer(friends);
+        while (itrFriends.hasMoreTokens()) {
+            String friend = itrFriends.nextToken();
+            context.write(new Text(friend), new Text(person));
         }
-        // StringTokenizer itr = new StringTokenizer(line,",");
-        // String person = itr.nextToken();
-        // String friends = itr.nextToken();
-        // StringTokenizer itrFriends = new StringTokenizer(friends);
-        // while (itrFriends.hasMoreTokens()) {
-        //     String friend = itrFriends.nextToken();
-        //     context.write(new Text(friend), new Text(person));
-        // }
     }
   }
 
@@ -63,6 +56,7 @@ public class FindCommonFriends {
         String people = new String();
         for (Text val : values) {
           people += val.toString();
+          people += ",";
         }
         context.write(key, new Text(people));
       }
@@ -92,11 +86,17 @@ public class FindCommonFriends {
 
     // Path tempDir = new Path("tmp-" + Integer.toString(  
     //         new Random().nextInt(Integer.MAX_VALUE))); //第一个job的输出写入临时目录
-    FileOutputFormat.setOutputPath(job, new Path(otherArgs.get(1)));
+    Path outputPath = new Path(otherArgs.get(1));
+    FileOutputFormat.setOutputPath(job, outputPath);
     //FileOutputFormat.setOutputPath(job, tempDir);
 
     //job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
+    // 判断output文件夹是否存在，如果存在则删除
+    FileSystem fileSystem = outputPath.getFileSystem(conf);// 根据path找到这个文件
+    if (fileSystem.exists(outputPath)) {
+      fileSystem.delete(outputPath, true);// true的意思是，就算output有东西，也一带删除
+    }
     System.exit(job.waitForCompletion(true) ? 0 : 1);
    
 
