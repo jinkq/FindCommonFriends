@@ -7,6 +7,7 @@ import java.util.StringTokenizer;
 import java.util.Random;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -51,15 +52,52 @@ public class FindCommonFriends {
 
   public static class ReverseReducer
        extends Reducer<Text,Text,Text,Text> {
-      public void reduce(Text key, Iterable<Text> values,
-                        Context context) throws IOException, InterruptedException {
-        String people = new String();
-        for (Text val : values) {
-          people += val.toString();
-          people += ",";
-        }
-        context.write(key, new Text(people));
+    @Override
+    public void reduce(Text key, Iterable<Text> values,
+                      Context context) throws IOException, InterruptedException {
+      String people = new String();
+      ArrayList<String> strValues = new ArrayList();
+      for (Text val : values) {
+        strValues.add(val.toString());
+        // people += val.toString();
       }
+      people = String.join(",", strValues);
+      context.write(key, new Text(people));
+    }
+  }
+
+  public static class PairMapper
+       extends Mapper<Object, Text, Text, Text>{
+    @Override
+    public void map(Object key, Text value, Context context
+                    ) throws IOException, InterruptedException {
+        String line = value.toString();
+        StringTokenizer itr = new StringTokenizer(line,"\t");
+        String friend = itr.nextToken();
+        String[] people = itr.nextToken().split(",");
+        Arrays.sort(people); 
+        for (int i = 0; i < people.length - 1; i++) {    
+          for (int j = i + 1; j < people.length; j++) {
+            context.write(new Text("[" + people[i] + "," + people[j] + "],"), new Text(friend));
+          }
+        }
+    }
+  }
+
+  public static class PairReducer
+       extends Reducer<Text,Text,Text,NullWritable> {
+    @Override
+    public void reduce(Text key, Iterable<Text> friends,
+                      Context context) throws IOException, InterruptedException {
+      String commonFriends = new String("[");
+      ArrayList<String> strValues = new ArrayList();
+      for (Text friend : friends) {
+        strValues.add(friend.toString());
+      }
+      commonFriends += String.join(",", strValues);
+      commonFriends += "]";
+      context.write(new Text("("+key.toString()+commonFriends+")"), NullWritable.get());
+    }
   }
 
   public static void main(String[] args) throws Exception {
@@ -73,7 +111,6 @@ public class FindCommonFriends {
     Job job = Job.getInstance(conf, "find common friends");
     job.setJarByClass(FindCommonFriends.class);
     job.setMapperClass(ReverseMapper.class);
-    //job.setCombinerClass(IntSumReducer.class);
     job.setReducerClass(ReverseReducer.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(Text.class);
@@ -84,48 +121,41 @@ public class FindCommonFriends {
     }
     FileInputFormat.addInputPath(job, new Path(otherArgs.get(0)));
 
-    // Path tempDir = new Path("tmp-" + Integer.toString(  
-    //         new Random().nextInt(Integer.MAX_VALUE))); //第一个job的输出写入临时目录
+    Path tempDir = new Path("tmp-" + Integer.toString(  
+            new Random().nextInt(Integer.MAX_VALUE))); //第一个job的输出写入临时目录
     Path outputPath = new Path(otherArgs.get(1));
-    FileOutputFormat.setOutputPath(job, outputPath);
-    //FileOutputFormat.setOutputPath(job, tempDir);
-
-    //job.setOutputFormatClass(SequenceFileOutputFormat.class);
-
-    // 判断output文件夹是否存在，如果存在则删除
-    FileSystem fileSystem = outputPath.getFileSystem(conf);// 根据path找到这个文件
-    if (fileSystem.exists(outputPath)) {
-      fileSystem.delete(outputPath, true);// true的意思是，就算output有东西，也一带删除
-    }
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
+    FileOutputFormat.setOutputPath(job, tempDir);
+    // System.exit(job.waitForCompletion(true) ? 0 : 1);
    
-
-  //   if(job.waitForCompletion(true))  
-  //   {  
-  //       //新建一个job处理排序和输出格式
-  //       Job sortJob = new Job(conf, "sort");  
-  //       sortJob.setJarByClass(WordCount.class);  
-
-  //       FileInputFormat.addInputPath(sortJob, tempDir); 
-
-  //       sortJob.setInputFormatClass(SequenceFileInputFormat.class);  
+    if(job.waitForCompletion(true))  
+    {  
+        //新建一个job
+        Job pairJob = new Job(conf, "pair");  
+        pairJob.setJarByClass(FindCommonFriends.class); 
+        FileInputFormat.addInputPath(pairJob, tempDir); 
+        pairJob.setMapperClass(PairMapper.class);  
+        pairJob.setReducerClass(PairReducer.class);
         
-  //       //map后交换key和value
-  //       sortJob.setMapperClass(InverseMapper.class);  
-  //       sortJob.setReducerClass(SortReducer.class);
+        FileOutputFormat.setOutputPath(pairJob, outputPath);  
+
+        pairJob.setOutputKeyClass(Text.class);  
+        pairJob.setOutputValueClass(Text.class); 
+
+        // 判断output文件夹是否存在，如果存在则删除
+        FileSystem fileSystem = outputPath.getFileSystem(conf);
+        if (fileSystem.exists(outputPath)) {
+          fileSystem.delete(outputPath, true);
+        }
+        if(pairJob.waitForCompletion(true))
+        {
+          FileSystem fileSystemTmp = tempDir.getFileSystem(conf);
+          fileSystemTmp.delete(tempDir, true);
+          System.exit(0);
+        }
         
-  //       FileOutputFormat.setOutputPath(sortJob, new Path(otherArgs.get(1)));  
-
-  //       sortJob.setOutputKeyClass(IntWritable.class);  
-  //       sortJob.setOutputValueClass(Text.class); 
-
-  //       //排序改写成降序
-  //       sortJob.setSortComparatorClass(IntWritableDecreasingComparator.class);  
-
-  //       System.exit(sortJob.waitForCompletion(true) ? 0 : 1); 
-  //   }  
-
-  //   FileSystem.get(conf).deleteOnExit(tempDir);
+        // System.exit(pairJob.waitForCompletion(true) ? 0 : 1); 
+    }
+    
   }
 }
 
